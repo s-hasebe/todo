@@ -28,6 +28,21 @@ There is no test suite configured yet.
 
 Outside the sandbox (the user's own terminal, or a Vercel build) Turbopack works normally — don't change the default scripts to work around this.
 
+### Git and `gh` operations
+
+Any write under `.git` (`git init`, `git add`, `git commit`, ...) is blocked in this sandbox with `Operation not permitted` — and this is *not* limited to the Bash tool: the user re-ran the same command with a `!` prefix (which normally executes outside the sandbox) and hit the identical error, so `.git` writes are blocked for this session no matter how the command is invoked. `gh` calls that touch the network/Keychain (e.g. `gh api`, `gh repo view`) fail from the Bash tool too, with `tls: failed to verify certificate: x509: OSStatus -26276` — that one *does* work via `!`, since it's Keychain access, not a `.git` write.
+
+Practical upshot: don't attempt `git init`/`add`/`commit`/`push` or `gh repo create` yourself, even via `!`. Ask the user to open a plain terminal window that isn't running Claude Code at all (Terminal.app, iTerm2, ...) and run the commands there. Afterwards, `git status` / `git log` / `git remote -v` all read fine from the Bash tool — use those to verify what the user did rather than re-running write commands to check.
+
+## Deployment
+
+Deployed as a static site to GitHub Pages via `.github/workflows/deploy-pages.yml`, which builds on every push to `master` and publishes through the standard `actions/upload-pages-artifact` + `actions/deploy-pages` flow (no `gh-pages` branch).
+
+- `next.config.ts` sets `output: "export"` (the app is 100% client-side — no API routes, no Server Actions — so static export is a clean fit) plus `basePath`/`assetPrefix` of `/todo`, gated behind a `GITHUB_PAGES` env var the workflow sets before building. Local `npm run dev`/`npm run build` are unaffected (no basePath) since that var isn't set outside CI.
+- `public/.nojekyll` exists so GitHub Pages' Jekyll processing doesn't swallow the `_next/` output directory (Jekyll ignores underscore-prefixed paths by default). It gets copied into `out/` automatically since Next.js copies `public/` verbatim into the export root.
+- **GitHub Pages requires GitHub Pro/Team/Enterprise for a private repository.** If the repo is on the Free plan and private, Pages must be enabled by making the repo public first (Settings → General → Danger Zone), or the account needs to upgrade.
+- One-time manual step (can't be done from here — needs the GitHub UI or `gh` run by the user outside this session): Settings → Pages → Build and deployment → Source → "GitHub Actions".
+
 ## Architecture
 
 - `src/app/page.tsx` — server component; renders `<TodoApp />`.
